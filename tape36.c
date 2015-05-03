@@ -29,6 +29,7 @@
 
 
 #define MAXRECSIZE 0x00FFFFFF
+#define RECBUFSIZE (MAXRECSIZE * sizeof( uint8_t ))
 
 typedef enum {
     CORE_DUMP,
@@ -223,7 +224,7 @@ static int convert( const char *infile, const tapemode_T inmode,
     if( verbose )
         fprintf( stderr, "Writing %s in %s mode\n", outfile, modename( outmode ) );
 
-    tapebuffer = malloc( MAXRECSIZE * sizeof( uint8_t ) );
+    tapebuffer = malloc( RECBUFSIZE );
     tenbuffer = malloc( tenbufsize );
     if( !(tapebuffer && tenbuffer) ) {
         fprintf( stderr, "Allocate buffer: %s\n", strerror( errno ) );
@@ -280,7 +281,7 @@ static int convert( const char *infile, const tapemode_T inmode,
             magtape_pprintf( stderr, in, 1 );
             break;
         }
-        recsize = pack( tenbuffer, recsize, tapebuffer );
+        recsize = pack( tenbuffer, recsize, tapebuffer, RECBUFSIZE );
         if( haserr )
             recsize = MTA_DATA_ERROR( recsize );
         status = magtape_write( out, tapebuffer, recsize );

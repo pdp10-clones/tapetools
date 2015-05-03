@@ -83,28 +83,28 @@ size_t encode8ascii( const char *string, wd36_T *data, size_t wds );
 
 /* Conversions to and from tape packing modes */
 
-typedef size_t (*packfn_T)(wd36_T *inbuf, size_t wc, uint8_t *outbuf);
+typedef size_t (*packfn_T)(wd36_T *inbuf, size_t wc, uint8_t *outbuf, const size_t bufsize);
 typedef size_t (*unpackfn_T)(uint8_t *inbuf, size_t insize, wd36_T *outbuf, size_t maxwc);
 
-size_t unpack_core_dump(uint8_t *inbuf, size_t insize, wd36_T *outbuf, size_t maxwc);
-size_t pack_core_dump(wd36_T *inbuf, size_t wc, uint8_t *outbuf);
+size_t unpack_core_dump(uint8_t *inbuf, size_t insize, wd36_T *outbuf, const size_t maxwc);
+size_t pack_core_dump(wd36_T *inbuf, size_t wc, uint8_t *outbuf, const size_t bufsize);
 
 /* For TAP files, 7-track is stored the right-justified in 8 bits.
  * Thus sixbit-7 and sixbit-9 happen to have the same encodings.
  */
 
 size_t unpack_sixbit_7(uint8_t *inbuf, size_t insize, wd36_T *outbuf, size_t maxwc);
-size_t pack_sixbit_7(wd36_T *inbuf, size_t wc, uint8_t *outbuf);
+size_t pack_sixbit_7(wd36_T *inbuf, size_t wc, uint8_t *outbuf, const size_t bufsize);
 #define unpack_sixbit_9 unpack_sixbit_7
 #define pack_sixbit_9 pack_sixbit_7
 
 size_t unpack_high_density(uint8_t *inbuf, size_t insize, wd36_T *outbuf, size_t maxwc);
-size_t pack_high_density(wd36_T *inbuf, size_t wc, uint8_t *outbuf);
+size_t pack_high_density(wd36_T *inbuf, size_t wc, uint8_t *outbuf, const size_t bufsize);
 
 size_t unpack_industry(uint8_t *inbuf, size_t insize, wd36_T *outbuf, size_t maxwc);
-size_t pack_industry(wd36_T *inbuf, size_t wc, uint8_t *outbuf);
+size_t pack_industry(wd36_T *inbuf, size_t wc, uint8_t *outbuf, const size_t bufsize);
 
 size_t unpack_ansi_ascii(uint8_t *inbuf, size_t insize, wd36_T *outbuf, size_t maxwc);
-size_t pack_ansi_ascii(wd36_T *inbuf, size_t wc, uint8_t *outbuf);
+size_t pack_ansi_ascii(wd36_T *inbuf, size_t wc, uint8_t *outbuf, const size_t bufsize);
 
 #endif

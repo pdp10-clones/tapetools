@@ -286,10 +286,13 @@ size_t unpack_core_dump(uint8_t *inbuf, size_t insize, wd36_T *outbuf, size_t ma
     return wc;
 }
 
-size_t pack_core_dump(wd36_T *inbuf, size_t wc, uint8_t *outbuf) {
+size_t pack_core_dump(wd36_T *inbuf, size_t wc, uint8_t *outbuf, const size_t bufsize) {
     size_t bc;
 
     bc = wc * 5;
+    if( bc > bufsize )
+        abort();
+
     while( wc-- != 0 ) {
         *outbuf++ = inbuf->lh >> 10;
         *outbuf++ = inbuf->lh >> 2;
@@ -328,10 +331,13 @@ size_t unpack_sixbit_7(uint8_t *inbuf, size_t insize, wd36_T *outbuf, size_t max
     return wc;
 }
 
-size_t pack_sixbit_7(wd36_T *inbuf, size_t wc, uint8_t *outbuf) {
+size_t pack_sixbit_7(wd36_T *inbuf, size_t wc, uint8_t *outbuf, const size_t bufsize) {
     size_t bc;
 
     bc = wc * 6;
+    if( bc > bufsize )
+        abort();
+
     while( wc-- != 0 ) {
         *outbuf++ = 077 & (inbuf->lh >> 12);
         *outbuf++ = 077 & (inbuf->lh >> 6);
@@ -378,10 +384,12 @@ size_t unpack_high_density(uint8_t *inbuf, size_t insize, wd36_T *outbuf, size_t
     return wc;
 }
 
-size_t pack_high_density(wd36_T *inbuf, size_t wc, uint8_t *outbuf) {
+size_t pack_high_density(wd36_T *inbuf, size_t wc, uint8_t *outbuf, const size_t bufsize) {
     size_t bc;
 
     bc = (((wc +1) & ~1) * 9) / 2;
+    if( bc > bufsize )
+        abort();
 
     while( wc-- != 0 ) {
         *outbuf++ = (inbuf->lh >> 10);
@@ -434,10 +442,12 @@ size_t unpack_industry(uint8_t *inbuf, size_t insize, wd36_T *outbuf, size_t max
     return wc;
 }
 
-size_t pack_industry(wd36_T *inbuf, size_t wc, uint8_t *outbuf) {
+size_t pack_industry(wd36_T *inbuf, size_t wc, uint8_t *outbuf, const size_t bufsize) {
     size_t bc;
 
     bc = wc * 4;
+    if( bc > bufsize )
+        abort();
 
     while( wc-- ) {
         outbuf = decode8ascii( inbuf++, outbuf );
@@ -477,10 +487,12 @@ size_t unpack_ansi_ascii(uint8_t *inbuf, size_t insize, wd36_T *outbuf, size_t m
     return wc;
 }
 
-size_t pack_ansi_ascii(wd36_T *inbuf, size_t wc, uint8_t *outbuf) {
+size_t pack_ansi_ascii(wd36_T *inbuf, size_t wc, uint8_t *outbuf, const size_t bufsize) {
     size_t bc;
 
     bc = wc * 5;
+    if( bc > bufsize )
+        abort();
 
     while( wc-- ) {
         outbuf = decode7ascii( inbuf, outbuf );

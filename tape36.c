@@ -300,7 +300,10 @@ static int convert( const char *infile, const int inmode, const char * outfile, 
 
     if( verbose ) {
         fprintf( stderr, "Completed\n" );
-        fprintf( stderr, "Input: %s", infile );
+        fprintf( stderr, "Input: at " );
+        magtape_pprintf( stderr, in, 1 );
+        fprintf( stderr, "Output: at " );
+        magtape_pprintf( stderr, out, 1 );
     }
     magtape_close( &in );
     magtape_close( &out );

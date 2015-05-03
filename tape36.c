@@ -31,31 +31,9 @@
 static int tapemode( const char *name );
 static const char *modename( const int mode );
 
-typedef size_t (*packfn)(wd36_T *inbuf, size_t wc, uint8_t *outbuf);
-typedef size_t (*unpackfn)(uint8_t *inbuf, size_t insize, wd36_T *outbuf);
-
-static int convert( const char *infile, const int inmode, const char * outfile, const int outmode );
-
-static size_t unpack_core_dump(uint8_t *inbuf, size_t insize, wd36_T *outbuf);
-static size_t pack_core_dump(wd36_T *inbuf, size_t wc, uint8_t *outbuf);
-
-/* For TAP files, 7-track is stored the right-justified in 8 bits.
- * Thus sixbit-7 and sixbit-9 happen to have the same encodings.
- */
-
-static size_t unpack_sixbit_7(uint8_t *inbuf, size_t insize, wd36_T *outbuf);
-static size_t pack_sixbit_7(wd36_T *inbuf, size_t wc, uint8_t *outbuf);
-#define unpack_sixbit_9 unpack_sixbit_7
-#define pack_sixbit_9 pack_sixbit_7
-
-static size_t unpack_high_density(uint8_t *inbuf, size_t insize, wd36_T *outbuf);
-static size_t pack_high_density(wd36_T *inbuf, size_t wc, uint8_t *outbuf);
-
-static size_t unpack_industry(uint8_t *inbuf, size_t insize, wd36_T *outbuf);
-static size_t pack_industry(wd36_T *inbuf, size_t wc, uint8_t *outbuf);
-
-static size_t unpack_ansi_ascii(uint8_t *inbuf, size_t insize, wd36_T *outbuf);
-static size_t pack_ansi_ascii(wd36_T *inbuf, size_t wc, uint8_t *outbuf);
+static int convert( const char *infile, const int inmode,
+                    const char *outfile, const int outmode,
+                    const char *density, const char *reelsize);
 
 static void usage( void );
 
@@ -74,8 +52,8 @@ static struct tapemode {
     const char *const name;
     const int mode;
     const double fpw;
-    packfn pack;
-    unpackfn unpack;
+    packfn_T pack;
+    unpackfn_T unpack;
     const char *const help;
 
 } tapemodes[] = {
@@ -100,7 +78,9 @@ static int verbose = 0;
 
 int main( int argc, char **argv) {
     char *infile = NULL,
-        *outfile=NULL;
+        *outfile=NULL,
+        *density = NULL,
+        *reelsize = NULL;
     int inmode = CORE_DUMP,
         outmode = CORE_DUMP;
 
@@ -121,7 +101,7 @@ int main( int argc, char **argv) {
         while( *sws ) {
             char *arg = NULL;
 
-            if( strchr( "io", sws[0] ) ) { /* Switches with arguments */
+            if( strchr( "dior", sws[0] ) ) { /* Switches with arguments */
                 if( sws[1] ) {
                     arg = strdup( sws + 1 );
                     sws[1] = '\0';
@@ -134,11 +114,17 @@ int main( int argc, char **argv) {
                     --argc;
                 }
                 switch( sws[0] ) {
+                case 'd':
+                    density = arg;
+                    break;
                 case 'i':
                     inmode = tapemode( arg );
                     break;
                 case 'o':
                     outmode = tapemode( arg );
+                    break;
+                case 'r':
+                    reelsize = arg;
                     break;
                 default:
                     abort();
@@ -181,19 +167,23 @@ int main( int argc, char **argv) {
         outfile = "-";
     }
 
-    exit(convert( infile, inmode, outfile, outmode ) );
+    exit(convert( infile, inmode, outfile, outmode, density, reelsize ) );
 }
 
-static int convert( const char *infile, const int inmode, const char * outfile, const int outmode ) {
+static int convert( const char *infile, const int inmode,
+                    const char *outfile, const int outmode,
+                    const char *density, const char *reelsize) {
     MAGTAPE *in, *out;
     unsigned int status;
     uint32_t bytesread, recsize;
-    packfn pack = NULL;
-    unpackfn unpack = NULL;
+    packfn_T pack = NULL;
+    unpackfn_T unpack = NULL;
     struct tapemode *mp;
     uint8_t *tapebuffer;
     wd36_T *tenbuffer;
     size_t tenbufsize = 0;
+    size_t maxwc = 0;
+
     int done = 0;
 
     for( mp = tapemodes; mp->name; mp++ ) {
@@ -201,6 +191,7 @@ static int convert( const char *infile, const int inmode, const char * outfile, 
             unpack = mp->unpack;
             tenbufsize =  sizeof( wd36_T ) * (size_t)
                 ceil(((double)MAXRECSIZE / mp->fpw) );
+            maxwc = tenbufsize / sizeof( wd36_T );
         }
         if( mp->mode == outmode )
             pack = mp->pack;
@@ -221,6 +212,14 @@ static int convert( const char *infile, const int inmode, const char * outfile, 
         fprintf( stderr, "%s: %s\n", outfile, strerror( errno ) );
         return 1;
     }
+    if( density || reelsize ) {
+        if( magtape_setsize( out, reelsize, density ) != 0 ) {
+            fprintf( stderr, "Invalid reel size or density\n" );
+            return 1;
+        }
+        magtape_setsize( in, reelsize, density );
+    }
+
     if( verbose )
         fprintf( stderr, "Writing %s in %s mode\n", outfile, modename( outmode ) );
 
@@ -275,7 +274,7 @@ static int convert( const char *infile, const int inmode, const char * outfile, 
         default:
             abort();
         }
-        recsize = unpack(tapebuffer, bytesread, tenbuffer );
+        recsize = unpack(tapebuffer, bytesread, tenbuffer, maxwc );
         if( recsize == (size_t)-1 ) {
             fprintf( stderr, "Record size %" PRIu32 " is invalid for %s input at ", bytesread, modename( inmode ) );
             magtape_pprintf( stderr, in, 1 );
@@ -288,11 +287,14 @@ static int convert( const char *infile, const int inmode, const char * outfile, 
         switch( status ) {
          case MTA_OK:
             break;
+
          case MTA_IOE:
             fprintf( stderr, "Error writing tape file: %s at ", strerror( errno ) );
             magtape_pprintf( stderr, out, 1 );
             done = 1;
             continue;
+
+        case MTA_EOM:
         default:
             abort();
         }
@@ -300,7 +302,7 @@ static int convert( const char *infile, const int inmode, const char * outfile, 
 
     if( verbose ) {
         fprintf( stderr, "Completed\n" );
-        fprintf( stderr, "Input: at " );
+        fprintf( stderr, "Input:  at " );
         magtape_pprintf( stderr, in, 1 );
         fprintf( stderr, "Output: at " );
         magtape_pprintf( stderr, out, 1 );
@@ -312,225 +314,6 @@ static int convert( const char *infile, const int inmode, const char * outfile, 
     free(tapebuffer);
 
     return 0;
-}
-
-static size_t unpack_core_dump(uint8_t *inbuf, size_t insize, wd36_T *outbuf) {
-    size_t wc = 0;
-
-    if( insize % 5 )
-        return (size_t)-1;
-
-    insize /= 5;
-    wc = insize;
-    while( insize-- != 0 ) {
-        outbuf->lh =
-            (inbuf[0] << 10) |
-            (inbuf[1] << 2)  |
-            (inbuf[2] >> 6);
-        outbuf->rh =
-            ((inbuf[2] & 077) << 12) |
-            (inbuf[3] << 4) |
-            (inbuf[4] & 017);
-        inbuf += 5;
-        outbuf++;
-    }
-
-    return wc;
-}
-
-static size_t pack_core_dump(wd36_T *inbuf, size_t wc, uint8_t *outbuf) {
-    size_t bc;
-
-    bc = wc * 5;
-    while( wc-- != 0 ) {
-        *outbuf++ = inbuf->lh >> 10;
-        *outbuf++ = inbuf->lh >> 2;
-        *outbuf++ = ((inbuf->lh << 6) & 0300) | ((inbuf->rh >> 12) & 077);
-        *outbuf++ = inbuf->rh >> 4;
-        *outbuf++ = inbuf++->rh & 017;
-    }
-
-    return bc;
-}
-
-static size_t unpack_sixbit_7(uint8_t *inbuf, size_t insize, wd36_T *outbuf) {
-    size_t wc = 0;
-
-    if( insize % 6 )
-        return (size_t)-1;
-
-    insize /= 6;
-    wc = insize;
-    while( insize-- != 0 ) {
-        outbuf->lh =
-            ((inbuf[0] & 077) << 12) |
-            ((inbuf[1] & 077) << 6)  |
-            (inbuf[2] & 077);
-        outbuf->rh =
-            ((inbuf[3] & 077) << 12) |
-            ((inbuf[4] & 077) << 6)  |
-            (inbuf[5] & 077);
-        inbuf += 6;
-        outbuf++;
-    }
-
-    return wc;
-}
-
-static size_t pack_sixbit_7(wd36_T *inbuf, size_t wc, uint8_t *outbuf) {
-    size_t bc;
-
-    bc = wc * 6;
-    while( wc-- != 0 ) {
-        *outbuf++ = 077 & (inbuf->lh >> 12);
-        *outbuf++ = 077 & (inbuf->lh >> 6);
-        *outbuf++ = 077 & (inbuf->lh);
-        *outbuf++ = 077 & (inbuf->rh >> 12);
-        *outbuf++ = 077 & (inbuf->rh >> 6);
-        *outbuf++ = 077 & (inbuf->rh);
-    }
-
-    return bc;
-}
-
-static size_t unpack_high_density(uint8_t *inbuf, size_t insize, wd36_T *outbuf) {
-    size_t wc = 0;
-
-    if( insize % 9 )
-        return (size_t)-1;
-
-    insize /= 9;
-    wc = insize * 2;
-    while( insize-- != 0 ) {
-        outbuf->lh =
-            (inbuf[0] << 10) |
-            (inbuf[1] << 2)  |
-            (inbuf[2] >> 6);
-        outbuf++->rh =
-            ((inbuf[2] & 077) << 12) |
-            (inbuf[3] << 4) |
-            ((inbuf[4] & 0360) >> 4);
-        outbuf->lh =
-            ((inbuf[4] & 017) << 14) |
-            (inbuf[5] << 6)  |
-            ((inbuf[6] & 0374) >> 2);
-        outbuf++->rh =
-            ((inbuf[6] & 03) << 16) |
-            (inbuf[7] << 8) |
-            inbuf[8];
-        inbuf += 9;
-    }
-
-    return wc;
-}
-
-static size_t pack_high_density(wd36_T *inbuf, size_t wc, uint8_t *outbuf) {
-    size_t bc;
-
-    bc = (((wc +1) & ~1) * 9) / 2;
-
-    while( wc-- != 0 ) {
-        *outbuf++ = (inbuf->lh >> 10);
-        *outbuf++ = (inbuf->lh >> 2);
-        *outbuf++ = ((inbuf->lh & 03) << 6) | ((inbuf->rh >> 12) & 077);
-        *outbuf++ = (inbuf->rh >> 4);
-        if( wc == 0 ) {
-            *outbuf++ = ((inbuf->rh & 017) << 4);
-            *outbuf++ = 0;
-            *outbuf++ = 0;
-            *outbuf++ = 0;
-            *outbuf++ = 0;
-            break;
-        }
-        *outbuf++ = ((inbuf[0].rh & 017) << 4) |
-                    ((inbuf[1].lh & 0740000) >> 14);
-        inbuf++;
-        *outbuf++ = (inbuf->lh >> 6);
-        *outbuf++ = ((inbuf->lh & 077) << 2) | ((inbuf->rh >> 16) & 03);
-        *outbuf++ = (inbuf->rh >> 8);
-        *outbuf++ = inbuf->rh;
-        inbuf++;
-    }
-
-    return bc;
-}
-
-static size_t unpack_industry(uint8_t *inbuf, size_t insize, wd36_T *outbuf) {
-    size_t wc = 0;
-
-    if( insize % 4 )
-        return (size_t)-1;
-
-    insize /= 4;
-    wc = insize;
-    while( insize-- != 0 ) {
-        outbuf->lh =
-            ((inbuf[0] & 0377) << 10) |
-            ((inbuf[1] & 0377) << 2)  |
-            (inbuf[2] >> 6);
-        outbuf++->rh =
-            ((inbuf[2] & 077) << 12) |
-            ((inbuf[3] & 0377) << 4);
-        inbuf += 4;
-    }
-
-    return wc;
-}
-
-static size_t pack_industry(wd36_T *inbuf, size_t wc, uint8_t *outbuf) {
-    size_t bc;
-
-    bc = wc * 4;
-
-    while( wc-- ) {
-        outbuf = decode8ascii( inbuf++, outbuf );
-
-    }
-
-    return bc;
-}
-
-static size_t unpack_ansi_ascii(uint8_t *inbuf, size_t insize, wd36_T *outbuf) {
-    size_t wc = 0;
-
-    if( insize % 5 )
-        return (size_t)-1;
-
-    insize /= 5;
-    wc = insize;
-
-    while( insize-- != 0 ) {
-        uint32_t bit35;
-
-        bit35 = ((inbuf[0] | inbuf[1] | inbuf[2] | inbuf[3]) >> 7) & 1;
-
-        outbuf->lh =
-            ((inbuf[0] & 0177) << 11) |
-            ((inbuf[1] & 0177) << 4)  |
-            ((inbuf[2] & 0170) >> 3);
-        outbuf++->rh =
-            ((inbuf[2] & 07) << 15) |
-            ((inbuf[3] & 0177) << 8) |
-            ((inbuf[4] & 0177) << 1) | bit35;
-        inbuf += 5;
-    }
-
-    return wc;
-}
-
-static size_t pack_ansi_ascii(wd36_T *inbuf, size_t wc, uint8_t *outbuf) {
-    size_t bc;
-
-    bc = wc * 5;
-
-    while( wc-- ) {
-        outbuf = decode7ascii( inbuf, outbuf );
-        if( inbuf++->rh & 1 )
-            outbuf[-1] |= 0200;
-    }
-
-    return bc;
-
 }
 
 static int tapemode( const char *name ) {
@@ -565,17 +348,20 @@ static const char *modename( const int mode ) {
 
 static void usage( void ) {
 
-    fprintf( stderr, "tape36 [-i mode] [-o mode] [-v] [-h] [infile [outfile]]\n" );
+    fprintf( stderr, "tape36 [-i mode] [-o mode] [-d dens] [-r len] [-v] [-h] [infile [outfile]]\n" );
     fprintf( stderr, "\n" );
     fprintf( stderr, "Convert .tap from PDP-10 one data packing format to another\n" );
     fprintf( stderr, "\n" );
     fprintf( stderr, "-i specify input file format\n" );
     fprintf( stderr, "-o specify output file format\n" );
+    fprintf( stderr, "-d specify tape density (800,1600, 6250, etc)\n" );
+    fprintf( stderr, "-r specify reel size (2400ft, 732m)\n" );
     fprintf( stderr, "-v provide processing details\n" );
     fprintf( stderr, "-h this usage\n" );
     fprintf( stderr, "\n" );
     fprintf( stderr, "infile and outfile default to stdin and stdout\n" );
     fprintf( stderr, "input and output modes default to core-dump\n" );
+    fprintf( stderr, "Density and length estimate linear position. They are optional.\n" );
     fprintf( stderr, "\n" );
     tapemode( NULL );
 

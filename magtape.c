@@ -88,12 +88,63 @@ MAGTAPE *magtape_open( const char *filename, const char *mode ) {
             return NULL;
         }
     }
+    mta->reellen = 0.0;
+    mta->reelpos = 0.0;
 
     return mta;
 }
 
-unsigned int magtape_read( MAGTAPE *mta, unsigned char *buffer, const size_t maxlen, uint32_t *recsize ) {
+int magtape_setsize( MAGTAPE *mta, const char *length, const char *density ) {
+    unsigned long denv, lenv;
+    char *endp;
 
+    mta->reellen = 0.0;
+    mta->reelpos = 0.0;
+    mta->density = 1.0;
+
+    if( length && !density )
+        density = "800";
+    if( density && !length )
+        length = "2400ft";
+    if( !(density && length) )
+        return 0;
+
+    denv = strtoul( density, &endp, 10 );
+    if( denv == 0 || endp == density )
+        return 1;
+    if( *endp ) {
+        if( strcasecmp( endp, "bpi" ) && strcasecmp( endp, "fci" ) )
+            return 1;
+    }
+
+    lenv = strtoul( length, &endp, 10 );
+    if( denv == 0 || endp == length )
+        return 1;
+    if( *endp ) {
+        if( !strcasecmp( endp, "m" ) ) {
+            mta->reellen = 39.3701 * (double)lenv;
+            mta->status |= MTS_METRIC;
+        } else if( strcasecmp( endp, "ft" ) ) {
+            return 1;
+        } else {
+            mta->reellen = 12.0 * (double)lenv;
+        }
+    } else {
+        mta->reellen = 12.0 * (double)lenv;
+    }
+    if( mta->reellen < (25.0 * 12.0) ) /* Minimum length is 25 ft */
+        return 1;                      /* 10 ft to BOT, 14 ft from EOT, 1 ft data */
+    mta->eotpos = mta->reellen - (14.0 * 12);
+
+    mta->density = (double)denv;
+    if( denv >= 6250 )
+        mta->irg = 0.3;
+    else
+        mta->irg = 0.6;
+    return 0;
+}
+
+unsigned int magtape_read( MAGTAPE *mta, unsigned char *buffer, const size_t maxlen, uint32_t *recsize ) {
     *recsize = 0;
 
     if( mta->status & MTS_WRITE )
@@ -124,6 +175,7 @@ unsigned int magtape_read( MAGTAPE *mta, unsigned char *buffer, const size_t max
 
         if (rectype == MT_TM) {
             mta->filenum++;
+            mta->reelpos += 3.0;
             if( mta->status & MTS_TM ) {
                 mta->blocknum = 0;
                 return MTA_EOF;
@@ -132,8 +184,10 @@ unsigned int magtape_read( MAGTAPE *mta, unsigned char *buffer, const size_t max
             return MTA_TM;
         }
 
-        if( rectype == MT_GAP )
+        if( rectype == MT_GAP ) {
+            mta->reelpos += 3.0;
             continue;
+        }
 
         if( mta->status & MTS_TM ) {
             mta->status &= ~MTS_TM;
@@ -151,6 +205,8 @@ unsigned int magtape_read( MAGTAPE *mta, unsigned char *buffer, const size_t max
         }
 
         length = rectype & MT_CNT;
+
+        mta->reelpos += mta->irg + ((double)length / mta->density);
 
         mta->blocknum++;
 
@@ -219,8 +275,11 @@ unsigned int magtape_write( MAGTAPE *mta, unsigned char *buffer, const size_t re
     if( !(mta->status & MTS_WRITE) )
         abort();
 
+    if( mta->status & MTS_EOM )
+        return MTA_EOM;
+
     if( recsize & MT_MBZ ) {
-        fprintf( stderr, "Record length too long\n" );
+        fprintf( stderr, "Record too long (%" PRId32 ") for TAP format\n", recsize );
         exit( 1 );
     }
 
@@ -247,6 +306,7 @@ unsigned int magtape_write( MAGTAPE *mta, unsigned char *buffer, const size_t re
         return MTA_IOE;
     }
     mta->blocknum++;
+    mta->reelpos += mta->irg + ((double)recsize / mta->density);
 
     return MTA_OK;
 }
@@ -264,12 +324,15 @@ unsigned int magtape_mark( MAGTAPE *mta, mta_marktype type ) {
         code = MT_TM;
         mta->blocknum = 0;
         mta->filenum++;
+        mta->reelpos += 3.0;
         break;
     case MTA_GAP_MARK:
         code = MT_GAP;
+        mta->reelpos += 3.0;
         break;
     case MTA_EOM_MARK:
         code = MT_EOM;
+        mta->status |= MTS_EOM;
         break;
     default:
         abort();
@@ -289,12 +352,19 @@ unsigned int magtape_mark( MAGTAPE *mta, mta_marktype type ) {
 }
 
 void magtape_pprintf( FILE *out, MAGTAPE *mta, int nl ) {
-    fprintf( out, "file %" PRIu32 ", record %" PRIu32 " of %s%s",
-             mta->filenum, mta->blocknum, mta->filename, nl? "\n": "" );
+    fprintf( out, "file %" PRIu32 ", record %" PRIu32, mta->filenum, mta->blocknum );
+    if( mta->reellen ) {
+        if( mta->status & MTS_METRIC )
+            fprintf( out, " (%.1fm)", mta->reelpos / 39.3701 );
+        else
+            fprintf( out, " (%.1fft)", mta->reelpos / 12 );
+    }
+    fprintf( out, " of %s%s",
+              mta->filename, nl? "\n": "" );
 }
 
 void magtape_close( MAGTAPE **mta ) {
-    if( mta[0]->status & MTS_WRITE ) {
+    if( (mta[0]->status & MTS_WRITE) && !(mta[0]->status & MTS_EOM) ) {
         if( magtape_mark( *mta, MTA_EOM_MARK ) != MTA_OK )
             fprintf( stderr, "%s: %s\n", mta[0]->filename, strerror( errno ) );
     }

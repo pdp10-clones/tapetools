@@ -33,12 +33,20 @@ typedef struct _MAGTAPE {
 #define MTS_TM         2
 #define MTS_EOM        4
 
-#define MTS_WRITE      128
+#define MTS_WRITE      0x10000
+#define MTS_METRIC     0x20000
 
     FILE    *fd;
+    double  reellen;
+    double  reelpos;
+    double  eotpos;
+    double density;
+    double irg;
 } MAGTAPE;
 
 MAGTAPE *magtape_open( const char *filename, const char *mode );
+
+int magtape_setsize( MAGTAPE *mta, const char *length, const char *density );
 
 unsigned int magtape_read( MAGTAPE *mta, unsigned char *buffer, const size_t maxlen, uint32_t *recsize );
 

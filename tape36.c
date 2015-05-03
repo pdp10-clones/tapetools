@@ -40,7 +40,7 @@ static size_t unpack_core_dump(uint8_t *inbuf, size_t insize, wd36_T *outbuf);
 static size_t pack_core_dump(wd36_T *inbuf, size_t wc, uint8_t *outbuf);
 
 /* For TAP files, 7-track is stored the right-justified in 8 bits.
- * Thus sixbit-7 and sixbit-7 happen to have the same encodings.
+ * Thus sixbit-7 and sixbit-9 happen to have the same encodings.
  */
 
 static size_t unpack_sixbit_7(uint8_t *inbuf, size_t insize, wd36_T *outbuf);
@@ -178,6 +178,7 @@ int main( int argc, char **argv) {
         }
     } else {
         infile = "-";
+        outfile = "-";
     }
 
     exit(convert( infile, inmode, outfile, outmode ) );

@@ -28,15 +28,6 @@
 #include "data36.h"
 
 
-static int tapemode( const char *name );
-static const char *modename( const int mode );
-
-static int convert( const char *infile, const int inmode,
-                    const char *outfile, const int outmode,
-                    const char *density, const char *reelsize);
-
-static void usage( void );
-
 #define MAXRECSIZE 0x00FFFFFF
 
 typedef enum {
@@ -48,9 +39,18 @@ typedef enum {
     ANSI_ASCII
 } tapemode_T;
 
+static tapemode_T tapemode( const char *name );
+static const char *modename( const tapemode_T mode );
+
+static int convert( const char *infile, const tapemode_T inmode,
+                    const char *outfile, const tapemode_T outmode,
+                    const char *density, const char *reelsize);
+
+static void usage( void );
+
 static struct tapemode {
     const char *const name;
-    const int mode;
+    tapemode_T mode;
     const double fpw;
     packfn_T pack;
     unpackfn_T unpack;
@@ -81,7 +81,7 @@ int main( int argc, char **argv) {
         *outfile=NULL,
         *density = NULL,
         *reelsize = NULL;
-    int inmode = CORE_DUMP,
+    tapemode_T inmode = CORE_DUMP,
         outmode = CORE_DUMP;
 
     --argc;
@@ -170,8 +170,8 @@ int main( int argc, char **argv) {
     exit(convert( infile, inmode, outfile, outmode, density, reelsize ) );
 }
 
-static int convert( const char *infile, const int inmode,
-                    const char *outfile, const int outmode,
+static int convert( const char *infile, const tapemode_T inmode,
+                    const char *outfile, const tapemode_T outmode,
                     const char *density, const char *reelsize) {
     MAGTAPE *in, *out;
     unsigned int status;
@@ -316,7 +316,7 @@ static int convert( const char *infile, const int inmode,
     return 0;
 }
 
-static int tapemode( const char *name ) {
+static tapemode_T tapemode( const char *name ) {
     struct tapemode *p;
 
     if( name != NULL ) {
@@ -336,7 +336,7 @@ static int tapemode( const char *name ) {
     return -1;
 }
  
-static const char *modename( const int mode ) {
+static const char *modename( const tapemode_T mode ) {
     struct tapemode *p;
 
     for( p = tapemodes; p->name; p++ ) {

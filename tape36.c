@@ -277,7 +277,7 @@ static int convert( const char *infile, const int inmode, const char * outfile, 
         }
         recsize = unpack(tapebuffer, bytesread, tenbuffer );
         if( recsize == (size_t)-1 ) {
-            fprintf( stderr, "Invalid record size %" PRIu32 " for input mode at ", bytesread );
+            fprintf( stderr, "Record size %" PRIu32 " is invalid for %s input at ", bytesread, modename( inmode ) );
             magtape_pprintf( stderr, in, 1 );
             break;
         }

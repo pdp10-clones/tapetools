@@ -1,0 +1,6 @@
+#!/bin/sh
+#
+
+exec 1>&2
+./version.sh && git add version.h
+exit $?

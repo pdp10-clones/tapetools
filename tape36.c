@@ -99,7 +99,7 @@ int main( int argc, char **argv) {
             exit(0);
         }
         if( !strcmp( sws, "-version" ) ) {
-            fprintf( stderr, VERSION_STRING(tape36) );
+            PRINT_VERSION( stderr, tape36 );
             exit(0);
         }
 

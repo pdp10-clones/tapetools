@@ -22,9 +22,22 @@
 #define VERSION_MINOR 0
 #endif
 #ifndef VERSION_EDIT
-#define VERSION_EDIT 10
+#define VERSION_EDIT 11
 #endif
 
-#define VERSION_STRING(prog) "%s version %d.%d(%d)\n", #prog, VERSION_MAJOR,VERSION_MINOR,VERSION_EDIT
+#ifndef VERSION_CUST
+#define VERSION_CUST 0
+#endif
+
+/* Version in 36-bit (lh,rh) format */
+
+#define VERSION_36(maj,min,edt,cust) ((((maj)&0777)<<6)|((min)&077)|(((cust)&07)<<15)),(edt)
+
+#define PRINT_VERSION(fd, prog) do {                                         \
+        wd36_T version = { VERSION_36( VERSION_MAJOR,VERSION_MINOR,VERSION_EDIT,VERSION_CUST ) }; \
+        char vbuf[VERSION_BUFFER_SIZE];                                 \
+                                                                        \
+        fprintf( fd, "%s %s\n", #prog, decodeversion( &version, vbuf ) ); \
+    } while( 0 )
 
 #endif

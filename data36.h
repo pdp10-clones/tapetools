@@ -7,7 +7,7 @@
  * This software is provided under GPL V2, including its disclaimer of
  * warranty.  Licensing under other terms may be available from the author.
  *
- * See the COPYING file for the well-known text of GPL V2.
+ * See the LICENSE file for the well-known text of GPL V2.
  *
  * Bug reports, fixes, suggestions and improvements are welcome.
  *

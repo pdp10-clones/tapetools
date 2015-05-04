@@ -7,7 +7,7 @@
 # This software is provided under GPL V2, including its disclaimer of
 # warranty.  Licensing under other terms may be available from the author.
 #
-# See the COPYING file for the well-known text of GPL V2.
+# See the LICENSE file for the well-known text of GPL V2.
 #
 # Bug reports, fixes, suggestions and improvements are welcome.
 #
@@ -34,7 +34,11 @@ LDFLAGS+=$(shell getconf LFS_LDFLAGS)
 OBJS=backup36.o data36.o math36.o sysdep.o magtape.o
 TOBJS=tape36.o data36.o magtape.o
 
-PACKAGED=COPYING backup36.c tape36.c magtape.c data36.c math36.c sysdep.c backup.h magtape.h data36.h math36.h sysdep.h Makefile
+PACKAGED=LICENSE README.md backup36.c tape36.c magtape.c data36.c math36.c sysdep.c backup.h magtape.h data36.h math36.h sysdep.h version.h Makefile
+
+VERDEF:=$(shell /bin/sh version.sh)
+
+.PHONY: all clean dist
 
 all: backup36 tape36
 
@@ -57,13 +61,9 @@ tape36: $(TOBJS) Makefile
 		sed -e 's/^ *//' -e 's/$$/:/' >> $*.d
 	@rm -f $*.d.tmp
 
-.PHONY: dist
-
 dist: $(PACKAGED)
 	$(TAR) -czf backup36.tar.gz $(PACKAGED)
 
-.PHONY: clean
-
 clean:
-	rm -f backup36 *.o *.d *.d.tmp
+	rm -f backup36 tape36 *.o *.d *.d.tmp version.h.tmp
 

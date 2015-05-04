@@ -7,7 +7,7 @@
  * This software is provided under GPL V2, including its disclaimer of
  * warranty.  Licensing under other terms may be available from the author.
  *
- * See the COPYING file for the well-known text of GPL V2.
+ * See the LICENSE file for the well-known text of GPL V2.
  *
  * Bug reports, fixes, suggestions and improvements are welcome.
  *
@@ -26,7 +26,7 @@
 
 #include "magtape.h"
 #include "data36.h"
-
+#include "version.h"
 
 #define MAXRECSIZE 0x00FFFFFF
 #define RECBUFSIZE (MAXRECSIZE * sizeof( uint8_t ))
@@ -96,6 +96,10 @@ int main( int argc, char **argv) {
 
         if( !strcmp( sws, "-help" ) ) {
             usage();
+            exit(0);
+        }
+        if( !strcmp( sws, "-version" ) ) {
+            fprintf( stderr, VERSION_STRING(tape36) );
             exit(0);
         }
 

@@ -22,7 +22,7 @@
 #define VERSION_MINOR 0
 #endif
 #ifndef VERSION_EDIT
-#define VERSION_EDIT 11
+#define VERSION_EDIT 12
 #endif
 
 #ifndef VERSION_CUST

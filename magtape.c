@@ -53,6 +53,21 @@
 #define MT_MBZ 0x7F000000 /* Length field: MBZ */
 #define MT_CNT 0x00FFFFFF /* Length (frames) written */
 
+    /* Parameters for linear position estimation.
+     * These are (mostly) in feet, though the position is maintained in inches.
+     * The standards specify minimums.  Most may be longer due to drive
+     * tolerances and/or tape errors.  The SimH format doesn't know
+     * about density or linear position, but they are needed to emulate
+     * the EOT marker.  The EOT marker is a write warning, used to initiate
+     * a volume switch.
+     */
+
+#define BOT_POS 16.0      /* Feet prior to BOT marker (14-18 ft) */
+#define EOT_POS 27.5      /* Feet after EOT marker (25-30ft) */
+#define MIN_LENGTH (BOT_POS + EOT_POS + 1.0) /* Minimum tape length */
+#define TM_LENGTH 3.5     /* Length of a tape mark or erase gap (in) */
+
+static int update_pos( MAGTAPE *mta, const double distance );
 
 MAGTAPE *magtape_open( const char *filename, const char *mode ) {
     MAGTAPE *mta;
@@ -132,11 +147,17 @@ int magtape_setsize( MAGTAPE *mta, const char *length, const char *density ) {
     } else {
         mta->reellen = 12.0 * (double)lenv;
     }
-    if( mta->reellen < (25.0 * 12.0) ) /* Minimum length is 25 ft */
-        return 1;                      /* 10 ft to BOT, 14 ft from EOT, 1 ft data */
-    mta->eotpos = mta->reellen - (14.0 * 12);
+    if( mta->reellen < (MIN_LENGTH * 12.0) )
+        return 1;
+
+    mta->reelpos = BOT_POS * 12.0;
+    mta->eotpos = mta->reellen - (EOT_POS * 12.0);
 
     mta->density = (double)denv;
+    /* Standard IRG (which doesn't include the 9 characters of CRC & LPCC)
+     * is minimum: 0.3in for 9-track >= 6350, 0.6 in 9-track < 6250, and 0.75
+     * for 7-track.  7-Track has LPCC, but no CRC.
+     */
     if( denv >= 6250 )
         mta->irg = 0.3;
     else
@@ -185,7 +206,7 @@ unsigned int magtape_read( MAGTAPE *mta, unsigned char *buffer, const size_t max
         }
 
         if( rectype == MT_GAP ) {
-            mta->reelpos += 3.0;
+            (void) update_pos( mta, TM_LENGTH );
             continue;
         }
 
@@ -206,7 +227,9 @@ unsigned int magtape_read( MAGTAPE *mta, unsigned char *buffer, const size_t max
 
         length = rectype & MT_CNT;
 
-        mta->reelpos += mta->irg + ((double)length / mta->density);
+        if( mta->reellen )
+            (void) update_pos( mta, mta->irg +
+                               ((double)(length+9) / mta->density) );
 
         mta->blocknum++;
 
@@ -306,8 +329,14 @@ unsigned int magtape_write( MAGTAPE *mta, unsigned char *buffer, const size_t re
         return MTA_IOE;
     }
     mta->blocknum++;
-    mta->reelpos += mta->irg + ((double)recsize / mta->density);
+    if( mta->reellen )
+            (void) update_pos( mta, mta->irg +
+                               ((double)(recsize+9) / mta->density) );
 
+    if( mta->status & MTS_EOT ) {
+        mta->status &= ~MTS_EOT;
+        return MTA_EOT;
+    }
     return MTA_OK;
 }
 
@@ -324,11 +353,11 @@ unsigned int magtape_mark( MAGTAPE *mta, mta_marktype type ) {
         code = MT_TM;
         mta->blocknum = 0;
         mta->filenum++;
-        mta->reelpos += 3.0;
+        (void) update_pos( mta, TM_LENGTH );
         break;
     case MTA_GAP_MARK:
         code = MT_GAP;
-        mta->reelpos += 3.0;
+        (void) update_pos( mta, TM_LENGTH );
         break;
     case MTA_EOM_MARK:
         code = MT_EOM;
@@ -361,6 +390,21 @@ void magtape_pprintf( FILE *out, MAGTAPE *mta, int nl ) {
     }
     fprintf( out, " of %s%s",
               mta->filename, nl? "\n": "" );
+}
+
+static int update_pos( MAGTAPE *mta, const double distance ) {
+    double oldpos;
+
+    if( !mta->reellen )
+        return 0;
+
+    oldpos = mta->reelpos;
+    mta->reelpos += distance;
+    if( oldpos < mta->eotpos && mta->reelpos >= mta->eotpos ) {
+        mta->status |= MTS_EOT;
+        return 1;
+    }
+    return 0;
 }
 
 void magtape_close( MAGTAPE **mta ) {

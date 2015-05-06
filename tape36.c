@@ -261,6 +261,11 @@ static int convert( const char *infile, const tapemode_T inmode,
                 magtape_pprintf( stderr, out, 1 );
                 done = 1;
             }
+            if( verbose && (out->status & MTS_EOT) ) {
+                out->status &= ~ MTS_EOT;
+                fprintf( stderr, "EOT marker at " );
+                magtape_pprintf( stderr, out, 1 );
+            }
             continue;
         case MTA_ERR:
             haserr = 1;
@@ -290,14 +295,21 @@ static int convert( const char *infile, const tapemode_T inmode,
             recsize = MTA_DATA_ERROR( recsize );
         status = magtape_write( out, tapebuffer, recsize );
         switch( status ) {
-         case MTA_OK:
+        case MTA_OK:
             break;
 
-         case MTA_IOE:
+        case MTA_IOE:
             fprintf( stderr, "Error writing tape file: %s at ", strerror( errno ) );
             magtape_pprintf( stderr, out, 1 );
             done = 1;
             continue;
+
+        case MTA_EOT:
+            if( verbose ) {
+                fprintf( stderr, "EOT marker at " );
+                magtape_pprintf( stderr, out, 1 );
+            }
+            break;
 
         case MTA_EOM:
         default:

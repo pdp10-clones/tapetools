@@ -32,6 +32,7 @@ typedef struct _MAGTAPE {
 #define MTS_ERROR      1
 #define MTS_TM         2
 #define MTS_EOM        4
+#define MTS_EOT        8
 
 #define MTS_WRITE      0x10000
 #define MTS_METRIC     0x20000
@@ -58,6 +59,7 @@ unsigned int magtape_read( MAGTAPE *mta, unsigned char *buffer, const size_t max
 #define MTA_IOE 5 /* IO/Error reading tape file */
 #define MTA_FMT 6 /* Format error in tape file */
 #define MTA_BTL 7 /* Block too large for buffer */
+#define MTA_EOT 8 /* EOT encountered on write */
 
 unsigned int magtape_write( MAGTAPE *mta, unsigned char *buffer, const size_t recsize );
 #define MTA_DATA_ERROR(len) ((len) | 0x80000000)
